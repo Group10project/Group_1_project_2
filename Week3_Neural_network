@@ -1,0 +1,72 @@
+import tensorflow as tf
+from tensorflow.keras.utils import to_categorical
+import numpy as np
+import matplotlib.pyplot as plt
+# Load the MNIST dataset
+(x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+
+# Normalize pixel values (0–255 → 0–1)
+x_train = x_train / 255.0
+x_test = x_test / 255.0
+
+# One-hot encode labels
+y_train = to_categorical(y_train, 10)
+y_test = to_categorical(y_test, 10)
+
+#THIS WILL SHOW THE FIRST 25 AND WHAT THEY LOOK LIKE
+plt.figure(figsize=(10, 10))  # Size of the whole figure
+
+for i in range(25):
+    plt.subplot(5, 5, i + 1)         # 5x5 grid
+    plt.imshow(x_train[i], cmap='gray')  # Show image in grayscale
+    plt.title(f"Label: {y_train[i]}")
+    plt.axis('off')                 # Hide axes for cleaner look
+
+plt.tight_layout()
+plt.show()
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Flatten(input_shape=(28, 28)),         # Flatten image
+    tf.keras.layers.Dense(128, activation='relu'),         # Hidden layer
+    tf.keras.layers.Dense(10, activation='softmax')        # Output layer (10 classes)
+])
+
+model.compile(
+    optimizer='adam',
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+model.fit(x_train, y_train, epochs=5, batch_size=32)
+
+test_loss, test_accuracy = model.evaluate(x_test, y_test)
+print("Test accuracy:", test_accuracy)
+
+
+# Predict the class of the first test image
+pred = model.predict(np.expand_dims(x_test[0], axis=0))
+print("Predicted digit:", np.argmax(pred))
+
+#THIS IS TO CHECK IF THE VALUE PREDICTED MATCHES WITH THE IMAGE
+index = 0
+while index < 10:    
+  
+
+    # Get the image and label
+    image = x_test[index]
+    true_label = y_test[index]
+
+    # Predict the digit
+    prediction = model.predict(np.expand_dims(image, axis=0))
+    predicted_label = np.argmax(prediction)
+
+    # Print labels
+    print("Predicted value:", predicted_label)
+
+
+    # Show the image
+    plt.imshow(image, cmap='gray')
+    plt.title(f"This is the actual number being predicted: ")
+    plt.axis('off')
+    plt.show()
+    
+    index += 1
