@@ -1,0 +1,122 @@
+#THIS IS THE WEBAPP THAT WILL BE USED TO SHOWCASE THE DASHBOARD
+
+import streamlit as st
+import pandas as pd
+from water_model import WaterShortagePredictor
+import datetime
+import matplotlib.pyplot as plt
+import os
+import joblib  
+
+# Predict here
+predictor = WaterShortagePredictor()
+
+# Load model if exists
+model_path = "water_model.joblib"
+if os.path.exists(model_path):
+    try:
+        predictor.model = joblib.load(model_path)
+    except Exception as e:
+        st.error(f"Error loading model: {str(e)}")
+        st.stop()
+
+# App UI
+st.set_page_config(layout="wide")
+st.title("🚰 Dlangezwa Water Shortage Prediction MODEL")
+
+# INPUT VIA SIDEBAR I THINK
+st.sidebar.header("Input Parameters")
+pred_date = st.sidebar.date_input(
+    "Prediction Date",
+    datetime.date.today() + datetime.timedelta(days=1)
+)
+
+# Fetch live data
+def get_live_data():
+    with st.spinner("Fetching latest data..."):
+        weather = predictor.fetch_weather_forecast(pred_date)
+        if weather.get('_source') == 'fallback':
+            st.warning(f"Using estimated weather data due to: {weather.get('_error', 'unknown error')}")
+        return {
+            "dam_level": predictor.fetch_dam_levels(),
+            "loadshedding_stage": predictor.fetch_loadshddingdata(pred_date),
+            "pollution_index": predictor.fetch_pollution_data(),
+            "water_usage": predictor.get_water_usage(pred_date),
+            "precipitation": weather["precipitation"],
+            "temperature": weather["temperature"],
+            "date": pred_date.strftime("%Y-%m-%d")
+        }
+
+# Prediction button
+if st.sidebar.button("Prediction using Live Data"):
+    if not hasattr(predictor, 'model'):
+        st.error("Model not loaded - please train the model first")
+        st.stop()
+    
+    live_data = get_live_data()
+    try:
+        proba = predictor.predict_shortage(live_data)
+        
+        st.subheader("🔮 Prediction Result")
+        st.metric(
+            "Probability of Water Shortage",
+            f"{proba:.1%}",
+            help="Likelihood of water shortage occurring on the selected day"
+        )
+        
+        if proba > 0.7:
+            st.error("🚨 High Risk: Prepare contingency plans!")
+        elif proba > 0.4:
+            st.warning("⚠️ Moderate Risk: Be prepared with plans just in case")
+        else:
+            st.success("✅ Low Risk: Normal operations")
+
+        st.subheader("📊 Input Data Used")
+        st.json(live_data)
+    except Exception as e:
+        st.error(f"Prediction failed: {str(e)}")
+
+# Data visualization section
+st.header("📈 Historical Water Shortage Trends")
+data_path = "historical_water_data.csv"
+if os.path.exists(data_path):
+    try:
+        df = pd.read_csv(data_path)
+        df['date'] = pd.to_datetime(df['date'])
+        
+        tab1, tab2 = st.tabs(["Shortage Frequency", "Factor Analysis"])
+        
+        with tab1:
+            monthly_shortages = df.groupby(df['date'].dt.month)['shortage_occurred'].mean()
+            st.bar_chart(monthly_shortages)
+        
+        with tab2:
+            fig, ax = plt.subplots(figsize=(10, 4))
+            df[['dam_level', 'loadshedding_stage']].plot(ax=ax)
+            st.pyplot(fig)
+    except Exception as e:
+        st.error(f"Error loading historical data: {str(e)}")
+else:
+    st.warning("Historical data not found - run water_model.py first")
+
+# Explanation section
+st.markdown("""
+## How This System Works
+1. **Data Collection**: Real-time dam levels, loadshedding, weather, and pollution data.
+2. **Machine Learning**: Random Forest model trained on historical patterns.
+3. **Prediction**: Estimates probability of water shortage for selected date.
+
+## Getting Started
+1. First run `python water_model.py` to train the model
+2. Then run `streamlit run water_app.py` to launch the dashboard
+""")
+
+# Add model training option
+if st.sidebar.button("Train New Model"):
+    with st.spinner("Training model (this may take a few minutes)..."):
+        try:
+            predictor.train("historical_water_data.csv")
+            st.success("Model trained successfully!")
+            st.experimental_rerun()  # Refresh the app
+        except Exception as e:
+            st.error(f"Model training failed: {str(e)}")
